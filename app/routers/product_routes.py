@@ -22,7 +22,7 @@ def read_product(product_id: int, db: Session = Depends(get_db)):
         )
     return product
 
-@router.post('/products/', response_model=schemas.Product)
+@router.post('/products', response_model=schemas.Product)
 def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
     try:
         product = crud.create_product(db, product)
