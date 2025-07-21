@@ -1,16 +1,36 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, validator
+from datetime import datetime, date
+from typing import Optional, List
+from enum import Enum
+from schemas.category_schema import Category
+from schemas.supplier_schema import Supplier
 
-class ProductSchema(BaseModel):
-    name: str = Field(..., max_length=100, description="The name of the product")
-    price: float = Field(..., gt=0, description="The price of the product")
-    stock: int = Field(..., ge=0, description="The available quantity of the product")
+# Product Schemas
+class ProductBase(BaseModel):
+    name: str
+    price: float
+    stock: int = 0
+    min_stock: int = 10
+    category_id: Optional[int] = None
+    supplier_id: Optional[int] = None
+    is_active: bool = True
 
-class ProductCreate(ProductSchema):
-    pass
+class ProductCreate(ProductBase):
+    code: str
 
-class Product(ProductSchema):
+class ProductUpdate(ProductBase):
+    name: Optional[str] = None
+    price: Optional[float] = None
+    stock: Optional[int] = None
+    code: Optional[str] = None
+
+class Product(ProductBase):
     id: int
+    code: str
+    created_at: datetime
+    updated_at: datetime
+    category: Optional[Category] = None
+    supplier: Optional[Supplier] = None
     
     class Config:
-        orm_mode = True
-    
+        from_attributes = True
