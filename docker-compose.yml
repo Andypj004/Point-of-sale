@@ -22,5 +22,17 @@ services:
       - DATABASE_URL=postgresql://user:password@db:5432/pos_db
     restart: always
 
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - app
+    command: npm run dev -- --host
+
 volumes:
   db_data:
