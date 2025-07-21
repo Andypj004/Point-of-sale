@@ -1,22 +1,32 @@
-from pydantic import BaseModel, Field
-from datetime import date
+from pydantic import BaseModel, validator
+from datetime import datetime, date
+from typing import Optional, List
+from enum import Enum
+from schemas.sale_detail_schema import SaleDetailCreate, SaleDetail
 
-class SaleSchema(BaseModel):
-    fecha : date = Field(..., description="Fecha de la venta en formato ISO 8601", example="2023-10-01")
-    total : float = Field(..., gt=0, description="Total de la venta", example=99.99)
+class PaymentMethod(str, Enum):
+    CASH = "cash"
+    CARD = "card"
+    TRANSFER = "transfer"
     
-class SaleCreate(SaleSchema):
-    pass
+    
+# Sale Schemas
+class SaleBase(BaseModel):
+    payment_method: PaymentMethod = PaymentMethod.CASH
+    customer_name: Optional[str] = None
+    notes: Optional[str] = None
+    tax_amount: float = 0.0
+    discount_amount: float = 0.0
 
-class Sale(SaleSchema):
+class SaleCreate(SaleBase):
+    items: List[SaleDetailCreate]
+
+class Sale(SaleBase):
     id: int
+    fecha: datetime
+    total: float
+    created_at: datetime
+    sale_details: List[SaleDetail]
     
     class Config:
-        orm_mode = True
-        schema_extra = {
-            "example": {
-                "id": 1,
-                "fecha": "2023-10-01",
-                "total": 99.99
-            }
-        }
+        from_attributes = True

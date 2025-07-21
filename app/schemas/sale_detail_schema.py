@@ -1,25 +1,22 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, validator
+from datetime import datetime, date
+from typing import Optional, List
+from enum import Enum
+from schemas.product_schema import Product
 
-class SaleDetailSchema(BaseModel):
-    sale_id: int = Field(..., description="ID de la venta a la que pertenece el detalle", example=1)
-    product_id: int = Field(..., description="ID del producto vendido", example=1)
-    quantity: int = Field(..., gt=0, description="Cantidad del producto vendido", example=2)
-    subtotal: float = Field(..., gt=0, description="Subtotal de la venta del producto", example=19.99)
-    
-class SaleDetailCreate(SaleDetailSchema):
+# Sale Detail Schemas
+class SaleDetailBase(BaseModel):
+    product_id: int
+    quantity: int
+    unit_price: float
+
+class SaleDetailCreate(SaleDetailBase):
     pass
 
-class SaleDetail(SaleDetailSchema):
+class SaleDetail(SaleDetailBase):
     id: int
+    subtotal: float
+    product: Product
     
     class Config:
-        orm_mode = True
-        schema_extra = {
-            "example": {
-                "id": 1,
-                "sale_id": 1,
-                "product_id": 1,
-                "quantity": 2,
-                "subtotal": 19.99
-            }
-        }
+        from_attributes = True

@@ -1,44 +1,52 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+import models
 from crud import sale_crud as crud
 from schemas import sale_schema as schemas
 from database import Base, engine, get_db
+from typing import List
 
 Base.metadata.create_all(bind=engine)
 
-router = APIRouter()
+router = APIRouter(prefix="/sales", tags=["sales"])
 
-@router.get("/sales", response_model=list[schemas.Sale])
-def read_sales(db: Session = Depends(get_db)):
-    return crud.get_sales(db)
+@router.get("/", response_model=List[schemas.Sale])
+def read_sales(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return crud.get_sales(db, skip=skip, limit=limit)
 
-@router.get("/sales/{sale_id}", response_model=schemas.Sale)
+@router.get("/{sale_id}", response_model=schemas.Sale)
 def read_sale(sale_id: int, db: Session = Depends(get_db)):
-    sale = crud.get_sale(db, sale_id)
-    if not sale:
+    db_sale = crud.get_sale(db, sale_id)
+    if not db_sale:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Venta con ID {sale_id} no encontrada"
+            detail=f"Sale with id {sale_id} not found"
         )
-    return sale
+    return db_sale
 
-@router.post('/sales', response_model=schemas.Sale)
+@router.post("/", response_model=schemas.Sale, status_code=status.HTTP_201_CREATED)
 def create_sale(sale: schemas.SaleCreate, db: Session = Depends(get_db)):
-    try:
-        sale = crud.create_sale(db, sale)
-        return sale
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error al crear la venta: {str(e)}"
-        )
-        
-@router.put("/sales/{sale_id}", response_model=schemas.Sale)
-def update_sale(sale_id: int, sale: schemas.SaleCreate, db: Session = Depends(get_db)):
-    sale = crud.update_sale(db, sale_id, sale)
-    if not sale:
+    return crud.create_sale_with_details(db, sale)
+
+@router.put("/{sale_id}", response_model=schemas.Sale)
+def update_sale(
+    sale_id: int, 
+    sale: schemas.SaleBase, 
+    db: Session = Depends(get_db)
+):
+    db_sale = crud.update_sale(db, sale_id, sale)
+    if not db_sale:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Venta con ID {sale_id} no encontrada"
+            detail=f"Sale with id {sale_id} not found"
         )
-    return sale
+    return db_sale
+
+@router.delete("/{sale_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sale(sale_id: int, db: Session = Depends(get_db)):
+    if not crud.delete_sale(db, sale_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sale with id {sale_id} not found"
+        )
+    return {"detail": "Sale deleted successfully"}
