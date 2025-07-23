@@ -10,6 +10,7 @@ from routers.supplier_routes import router as supplier_router
 from routers.dashboard_routes import router as dashboard_router
 from routers.reports_routes import router as reports_router
 from routers.inventory_routes import router as inventory_router
+from routers.seed_routes import router as seed_router
 
 app = FastAPI(title="POS System API", version="1.0.0")
 
@@ -23,6 +24,7 @@ app.include_router(supplier_router)
 app.include_router(dashboard_router)
 app.include_router(reports_router)
 app.include_router(inventory_router)
+app.include_router(seed_router)
 
 app.add_middleware(
     CORSMiddleware,
