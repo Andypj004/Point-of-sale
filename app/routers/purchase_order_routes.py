@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-import schemas.purchase_order_schemas as schemas
-import crud.purchase_order_crud as crud
-import models.purchase_order as models
+from schemas import purchase_order_schemas as schemas
+from crud import purchase_order_crud as crud
 from database import get_db
-from typing import Optional, List
+from models.purchase_order import PurchaseOrder
+from models.supplier import Supplier
+from models.product import Product
+from typing import List, Optional
 
 router = APIRouter(prefix="/purchase-orders", tags=["purchase-orders"])
 
@@ -15,9 +17,9 @@ def read_orders(
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.PurchaseOrder)
+    query = db.query(PurchaseOrder)
     if status:
-        query = query.filter(models.PurchaseOrder.status == status)
+        query = query.filter(PurchaseOrder.status == status)
     return query.offset(skip).limit(limit).all()
 
 @router.get("/{order_id}", response_model=schemas.PurchaseOrder)
@@ -32,27 +34,23 @@ def read_order(order_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=schemas.PurchaseOrder, status_code=201)
 def create_order(order: schemas.PurchaseOrderCreate, db: Session = Depends(get_db)):
-    # Validar proveedor
-    supplier = db.query(models.Supplier).filter(
-        models.Supplier.id == order.supplier_id
+    supplier = db.query(Supplier).filter(
+        Supplier.id == order.supplier_id
     ).first()
     if not supplier:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Supplier not found"
         )
-    
-    # Validar productos
     for item in order.items:
-        product = db.query(models.Product).filter(
-            models.Product.id == item.product_id
+        product = db.query(Product).filter(
+            Product.id == item.product_id
         ).first()
         if not product:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Product with id {item.product_id} not found"
             )
-    
     return crud.create_purchase_order(db, order)
 
 @router.put("/{order_id}", response_model=schemas.PurchaseOrder)
@@ -81,3 +79,24 @@ def receive_order(
             detail=f"Order with id {order_id} not found"
         )
     return db_order
+
+@router.post("/seed", status_code=201)
+def seed_purchase_orders(db: Session = Depends(get_db)):
+    suppliers = db.query(Supplier).limit(10).all()
+    if not suppliers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Se requieren proveedores para crear órdenes. Primero ejecuta /suppliers/seed."
+        )
+    orders = []
+    for i in range(1, 11):
+        order = PurchaseOrder(
+            order_number=f"PO-{i:03}",
+            supplier_id=suppliers[i % len(suppliers)].id,
+            status="pending",
+            total_amount=100 + i
+        )
+        db.add(order)
+        orders.append(order)
+    db.commit()
+    return {"message": "10 purchase orders seeded"}

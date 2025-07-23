@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-import models
-from crud import sale_crud as crud
+from models.sale import Sale
+import crud.sale_crud as crud
 from schemas import sale_schema as schemas
 from database import Base, engine, get_db
 from typing import List
+from datetime import datetime
 
 Base.metadata.create_all(bind=engine)
 
@@ -50,3 +51,21 @@ def delete_sale(sale_id: int, db: Session = Depends(get_db)):
             detail=f"Sale with id {sale_id} not found"
         )
     return {"detail": "Sale deleted successfully"}
+
+@router.post("/seed", status_code=201)
+def seed_sales(db: Session = Depends(get_db)):
+    sales = []
+    for i in range(1, 11):
+        sale = Sale(
+            payment_method="cash",
+            customer_name=f"Customer {i}",
+            notes=f"Note {i}",
+            tax_amount=2.0,
+            discount_amount=1.0,
+            total=100 + i,
+            fecha=datetime.now()
+        )
+        db.add(sale)
+        sales.append(sale)
+    db.commit()
+    return {"message": "10 sales seeded"}

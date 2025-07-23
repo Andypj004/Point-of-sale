@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import crud.category_crud as crud
-import models.category as models
+from models.category import Category
 import schemas.category_schema as schemas
 from database import get_db
 from typing import List
@@ -24,9 +24,8 @@ def read_category(category_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=schemas.Category, status_code=status.HTTP_201_CREATED)
 def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db)):
-    # Check if category name already exists
-    existing_category = db.query(models.Category).filter(
-        models.Category.name == category.name
+    existing_category = db.query(Category).filter(
+        Category.name == category.name
     ).first()
     if existing_category:
         raise HTTPException(
@@ -56,3 +55,14 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Category with id {category_id} not found"
         )
+
+@router.post("/seed", status_code=201)
+def seed_categories(db: Session = Depends(get_db)):
+    categories = [
+        {"name": f"Category {i}", "description": f"Description {i}"} for i in range(1, 11)
+    ]
+    for cat in categories:
+        if not db.query(Category).filter(Category.name == cat["name"]).first():
+            db.add(Category(**cat))
+    db.commit()
+    return {"message": "10 categories seeded"}

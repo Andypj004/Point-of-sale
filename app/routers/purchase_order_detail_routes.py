@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import schemas.purchase_order_detail_schema as schemas
 import crud.purchase_order_detail_crud as crud
+import models
 from database import get_db
 from typing import List
 
@@ -30,3 +31,19 @@ def receive_items(
             detail=f"Order detail with id {detail_id} not found"
         )
     return db_detail
+
+@router.post("/seed", status_code=201)
+def seed_purchase_order_details(db: Session = Depends(get_db)):
+    orders = db.query(models.PurchaseOrder).limit(10).all()
+    products = db.query(models.Product).limit(10).all()
+    for i in range(10):
+        detail = models.PurchaseOrderDetail(
+            purchase_order_id=orders[i % len(orders)].id,
+            product_id=products[i % len(products)].id,
+            quantity_ordered=5 + i,
+            unit_cost=products[i % len(products)].price * 0.8,
+            total_cost=(5 + i) * products[i % len(products)].price * 0.8
+        )
+        db.add(detail)
+    db.commit()
+    return {"message": "10 purchase order details seeded"}
