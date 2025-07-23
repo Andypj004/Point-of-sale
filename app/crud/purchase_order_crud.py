@@ -70,3 +70,33 @@ def delete_purchase_order(db: Session, order_id: int):
         db.commit()
         return True
     return False
+
+def create_restock_order(db: Session, product_id: int, quantity: int):
+    product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.is_active == True
+    ).first()
+    if not product:
+        return None, "Product not found"
+    if not product.supplier_id:
+        return None, "Product has no supplier assigned"
+    
+    order_number = f"PO-{datetime.now().strftime('%Y%m%d')}-{product_id}"
+    purchase_order = models.PurchaseOrder(
+        order_number=order_number,
+        supplier_id=product.supplier_id,
+        status="pending",
+        total_amount=quantity * product.price * 0.8
+    )
+    db.add(purchase_order)
+    db.flush()
+    order_detail = models.PurchaseOrderDetail(
+        purchase_order_id=purchase_order.id,
+        product_id=product_id,
+        quantity_ordered=quantity,
+        unit_cost=product.price * 0.8,
+        total_cost=quantity * product.price * 0.8
+    )
+    db.add(order_detail)
+    db.commit()
+    return purchase_order, product.name
