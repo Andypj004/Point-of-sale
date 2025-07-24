@@ -5,9 +5,9 @@ from enum import Enum
 from schemas.sale_detail_schema import SaleDetailCreate, SaleDetail
 
 class PaymentMethod(str, Enum):
-    CASH = "cash"
-    CARD = "card"
-    TRANSFER = "transfer"
+    CASH = "efectivo"
+    CARD = "tarjeta"
+    TRANSFER = "transferencia"
     
     
 # Sale Schemas

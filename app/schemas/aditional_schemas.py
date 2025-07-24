@@ -4,10 +4,10 @@ from typing import Optional, List
 from enum import Enum
 
 class MovementType(str, Enum):
-    SALE = "sale"
-    PURCHASE = "purchase"
-    ADJUSTMENT = "adjustment"
-    RETURN = "return"
+    SALE = "venta"
+    PURCHASE = "compra"
+    ADJUSTMENT = "ajuste"
+    RETURN = "devolucion"
 
 # Dashboard Schemas
 class DashboardMetrics(BaseModel):

@@ -27,7 +27,15 @@ def read_sale(sale_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=schemas.Sale, status_code=status.HTTP_201_CREATED)
 def create_sale(sale: schemas.SaleCreate, db: Session = Depends(get_db)):
-    return crud.create_sale_with_details(db, sale)
+    try:
+        return crud.create_sale_with_details(db, sale)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating sale: {str(e)}"
+        )
 
 @router.put("/{sale_id}", response_model=schemas.Sale)
 def update_sale(

@@ -3,9 +3,11 @@ from sqlalchemy import func, desc
 import models.sale as sale_models
 import models.product as product_models
 import models.sale_detail as sale_detail_models
+import models.inventory_movement as inventory_models
 import schemas.sale_schema as schemas
 from datetime import datetime
 from typing import List
+from fastapi import HTTPException, status
 
 def get_sales(db: Session, skip: int = 0, limit: int = 100):
     return db.query(sale_models.Sale).offset(skip).limit(limit).all()
@@ -14,38 +16,105 @@ def get_sale(db: Session, sale_id: int):
     return db.query(sale_models.Sale).filter(sale_models.Sale.id == sale_id).first()
 
 def create_sale_with_details(db: Session, sale: schemas.SaleCreate):
-    # Calcular total
-    total = sum(item.unit_price * item.quantity for item in sale.items)
-    total += sale.tax_amount - sale.discount_amount
-
-    # Crear la venta
-    db_sale = sale_models.Sale(
-        payment_method=sale.payment_method,
-        customer_name=sale.customer_name,
-        notes=sale.notes,
-        tax_amount=sale.tax_amount,
-        discount_amount=sale.discount_amount,
-        total=total,
-        fecha=datetime.now()
-    )
-    db.add(db_sale)
-    db.commit()
-    db.refresh(db_sale)
-
-    # Crear detalles de venta
-    for item in sale.items:
-        db_detail = sale_detail_models.SaleDetail(
-            sale_id=db_sale.id,
-            product_id=item.product_id,
-            quantity=item.quantity,
-            unit_price=item.unit_price,
-            subtotal=item.unit_price * item.quantity
+    try:
+        # Validate products and stock first
+        total_amount = 0
+        sale_items = []
+        
+        for item in sale.items:
+            # Get product and validate
+            product = db.query(product_models.Product).filter(
+                product_models.Product.id == item.product_id,
+                product_models.Product.is_active == True
+            ).first()
+            
+            if not product:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Product with id {item.product_id} not found or inactive"
+                )
+            
+            # Check stock availability
+            if product.stock < item.quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient stock for product {product.name}. Available: {product.stock}, Requested: {item.quantity}"
+                )
+            
+            subtotal = item.unit_price * item.quantity
+            total_amount += subtotal
+            sale_items.append({
+                'product': product,
+                'item': item,
+                'subtotal': subtotal
+            })
+        
+        # Calculate final total with tax and discount
+        final_total = total_amount + sale.tax_amount - sale.discount_amount
+        
+        # Create sale record
+        db_sale = sale_models.Sale(
+            payment_method=sale.payment_method,
+            customer_name=sale.customer_name,
+            notes=sale.notes,
+            tax_amount=sale.tax_amount,
+            discount_amount=sale.discount_amount,
+            total=final_total,
+            fecha=datetime.now()
         )
-        db.add(db_detail)
-
-    db.commit()
-    db.refresh(db_sale)
-    return db_sale
+        
+        db.add(db_sale)
+        db.flush()  # Get the sale ID without committing
+        
+        # Create sale details and update stock
+        for sale_item in sale_items:
+            product = sale_item['product']
+            item = sale_item['item']
+            subtotal = sale_item['subtotal']
+            
+            # Create sale detail
+            db_detail = sale_detail_models.SaleDetail(
+                sale_id=db_sale.id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                subtotal=subtotal
+            )
+            db.add(db_detail)
+            
+            # Update product stock
+            previous_stock = product.stock
+            product.stock -= item.quantity
+            
+            # Create inventory movement record (if you have this model)
+            movement = inventory_models.InventoryMovement(
+                product_id=item.product_id,
+                movement_type='sale',
+                quantity=-item.quantity,
+                reference_type='sale',
+                reference_id=db_sale.id,
+                movement_date=datetime.now(),
+                notes=f"Sale #{db_sale.id}",
+                previous_stock=previous_stock,
+                new_stock=product.stock
+            )
+            db.add(movement)
+        
+        # Commit all changes
+        db.commit()
+        db.refresh(db_sale)
+        
+        return db_sale
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating sale: {str(e)}"
+        )
 
 def update_sale(db: Session, sale_id: int, sale: schemas.SaleBase):
     db_sale = db.query(sale_models.Sale).filter(sale_models.Sale.id == sale_id).first()
@@ -60,6 +129,7 @@ def update_sale(db: Session, sale_id: int, sale: schemas.SaleBase):
 def delete_sale(db: Session, sale_id: int):
     db_sale = db.query(sale_models.Sale).filter(sale_models.Sale.id == sale_id).first()
     if db_sale:
+        # Note: In a real system, you should reverse stock changes
         db.delete(db_sale)
         db.commit()
         return True
