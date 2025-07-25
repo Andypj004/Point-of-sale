@@ -39,6 +39,9 @@ class ApiService {
     return this.request('/products');
   }
 
+  async getCategories() {
+    return this.request('/categories');
+  }
   async createProduct(product) {
     return this.request('/products', {
       method: 'POST',
@@ -61,6 +64,7 @@ class ApiService {
 
   // Sales endpoints
   async createSale(sale) {
+    console.log('API: Creating sale with data:', sale); // Debug log
     return this.request('/sales', {
       method: 'POST',
       body: JSON.stringify(sale),
@@ -77,11 +81,23 @@ class ApiService {
     return this.request(`/reports/${type}?start_date=${startDate}&end_date=${endDate}`);
   }
 
+  async getProductsReport(startDate, endDate, categoryId = null) {
+    let url = `/reports/products?start_date=${startDate}&end_date=${endDate}`;
+    if (categoryId) {
+      url += `&category_id=${categoryId}`;
+    }
+    return this.request(url);
+  }
   // Inventory endpoints
   async getLowStockItems() {
     return this.request('/inventory/low-stock');
   }
 
+  async createRestockOrder(productId, quantity) {
+    return this.request(`/inventory/restock/${productId}?quantity=${quantity}`, {
+      method: 'POST',
+    });
+  }
   async getSuppliers() {
     return this.request('/suppliers');
   }
