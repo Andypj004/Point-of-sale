@@ -67,18 +67,47 @@ def update_order(
         )
     return db_order
 
+@router.patch("/{order_id}/receive-items", response_model=schemas.PurchaseOrder)
+def receive_order_items(
+    order_id: int,
+    items_data: dict,
+    db: Session = Depends(get_db)
+):
+    order, error = crud.receive_order_items(db, order_id, items_data)
+    if error == "Order not found":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Order with id {order_id} not found"
+        )
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error
+        )
+    return order
+
 @router.patch("/{order_id}/receive", response_model=schemas.PurchaseOrder)
 def receive_order(
     order_id: int,
     db: Session = Depends(get_db)
 ):
-    db_order = crud.update_purchase_order(db, order_id, schemas.PurchaseOrderUpdate(status="delivered"))
-    if not db_order:
+    order, error = crud.receive_purchase_order(db, order_id)
+    if error == "Order not found":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Order with id {order_id} not found"
         )
-    return db_order
+    if error == "Order already received":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order already received"
+        )
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error
+        )
+    return order
 
 @router.post("/seed", status_code=201)
 def seed_purchase_orders(db: Session = Depends(get_db)):
