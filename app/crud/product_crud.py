@@ -51,6 +51,22 @@ def delete_product(db: Session, product_id: int):
         return db_product
     return None
 
+def update_product_stock(db, product_id, new_stock):
+    product = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.is_active == True
+    ).first()
+    if not product:
+        return None
+    if new_stock is None or new_stock < 0:
+        raise ValueError("Stock debe ser un número positivo")
+    # Aquí podrías agregar el registro de movimiento de inventario si tienes el modelo
+    product.stock = new_stock
+    product.updated_at = datetime.now()
+    db.commit()
+    db.refresh(product)
+    return product
+
 def get_total_products(db: Session):
     return db.query(func.count(models.Product.id)).filter(
         models.Product.is_active == True

@@ -70,6 +70,27 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
         )
     return {"message": f"Producto con ID {product_id} desactivado exitosamente"}
 
+@router.patch("/{product_id}/stock", response_model=schemas.Product)
+def update_product_stock(
+    product_id: int,
+    stock_data: dict,
+    db: Session = Depends(get_db)
+):
+    try:
+        new_stock = stock_data.get('stock')
+        product = crud.update_product_stock(db, product_id, new_stock)
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Producto con ID {product_id} no encontrado"
+            )
+        return product
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
 @router.post("/seed", status_code=201)
 def seed_products(db: Session = Depends(get_db)):
     categories = db.query(Category).limit(10).all()
