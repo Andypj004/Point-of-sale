@@ -119,6 +119,32 @@ class ApiService {
   async getPurchaseOrders() {
     return this.request('/purchase-orders');
   }
+
+  // Stock management endpoints
+  async updateProductStock(productId, newStock) {
+    return this.request(`/products/${productId}/stock`, {
+      method: 'PATCH',
+      body: JSON.stringify({ stock: newStock }),
+    });
+  }
+
+  async receiveOrder(orderId) {
+    return this.request(`/purchase-orders/${orderId}/receive`, {
+      method: 'PATCH',
+    });
+  }
+
+  // Purchase order details
+  async getPurchaseOrderDetails(orderId) {
+    return this.request(`/purchase-order-details/order/${orderId}`);
+  }
+
+  async receiveOrderItems(orderId, items) {
+    return this.request(`/purchase-orders/${orderId}/receive-items`, {
+      method: 'PATCH',
+      body: JSON.stringify({ items }),
+    });
+  }
 }
 
 export default new ApiService();
