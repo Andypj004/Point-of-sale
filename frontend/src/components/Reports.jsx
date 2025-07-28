@@ -1,24 +1,33 @@
 import React, { useState } from 'react';
-import { Calendar, Download, TrendingUp, TrendingDown } from 'lucide-react';
+import { Calendar, Download, TrendingUp, TrendingDown, FileSpreadsheet } from 'lucide-react';
+import { useApi, useApiMutation } from '../hooks/useApi';
+import apiService from '../services/api';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 const Reports = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState('today');
+  const [selectedPeriod, setSelectedPeriod] = useState('week');
   const [selectedReport, setSelectedReport] = useState('sales');
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 7);
+    return date.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const date = new Date();
+    return date.toISOString().split('T')[0];
+  });
+  const [categoryFilter, setCategoryFilter] = useState('');
 
-  const salesData = [
-    { fecha: '20/08/2021', ventas: 23, total: 50.60, productos: 45 },
-    { fecha: '19/08/2021', ventas: 18, total: 42.30, productos: 38 },
-    { fecha: '18/08/2021', ventas: 31, total: 67.80, productos: 52 },
-    { fecha: '17/08/2021', ventas: 25, total: 55.20, productos: 41 },
-    { fecha: '16/08/2021', ventas: 29, total: 63.40, productos: 48 },
-  ];
-
-  const productReports = [
-    { producto: 'Libra de arroz', vendidos: 45, ingresos: 22.50, stock: 150 },
-    { producto: 'Frijoles negros', vendidos: 32, ingresos: 24.00, stock: 89 },
-    { producto: 'Azúcar blanca', vendidos: 28, ingresos: 16.80, stock: 45 },
-    { producto: 'Aceite vegetal', vendidos: 15, ingresos: 18.75, stock: 23 },
-  ];
+  const { data: categories } = useApi('/categories');
+  const { data: salesReport, loading: salesLoading, refetch: refetchSales } = useApi(
+    `/reports/sales?start_date=${startDate}&end_date=${endDate}`,
+    [startDate, endDate]
+  );
+  const { data: productsReport, loading: productsLoading, refetch: refetchProducts } = useApi(
+    `/reports/products?start_date=${startDate}&end_date=${endDate}${categoryFilter ? `&category_id=${categoryFilter}` : ''}`,
+    [startDate, endDate, categoryFilter]
+  );
 
   const periods = [
     { value: 'today', label: 'Hoy' },
@@ -30,24 +39,94 @@ const Reports = () => {
   const reportTypes = [
     { value: 'sales', label: 'Ventas' },
     { value: 'products', label: 'Productos' },
-    { value: 'inventory', label: 'Inventario' },
   ];
 
-  const totalSales = salesData.reduce((sum, day) => sum + day.ventas, 0);
-  const totalRevenue = salesData.reduce((sum, day) => sum + day.total, 0);
-  const avgDailySales = totalSales / salesData.length;
+  const handlePeriodChange = (period) => {
+    setSelectedPeriod(period);
+    const today = new Date();
+    
+    switch (period) {
+      case 'today':
+        setStartDate(today.toISOString().split('T')[0]);
+        setEndDate(today.toISOString().split('T')[0]);
+        break;
+      case 'week':
+        const weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 7);
+        setStartDate(weekAgo.toISOString().split('T')[0]);
+        setEndDate(today.toISOString().split('T')[0]);
+        break;
+      case 'month':
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(today.getMonth() - 1);
+        setStartDate(monthAgo.toISOString().split('T')[0]);
+        setEndDate(today.toISOString().split('T')[0]);
+        break;
+    }
+  };
+
+  const exportToExcel = () => {
+    const data = selectedReport === 'sales' ? salesReport : productsReport;
+    if (!data || data.length === 0) {
+      alert('No hay datos para exportar');
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    
+    const sheetName = selectedReport === 'sales' ? 'Reporte de Ventas' : 'Reporte de Productos';
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    
+    const fileName = `${sheetName}_${startDate}_${endDate}.xlsx`;
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    
+    saveAs(blob, fileName);
+  };
+
+  const currentData = selectedReport === 'sales' ? salesReport : productsReport;
+  const isLoading = selectedReport === 'sales' ? salesLoading : productsLoading;
+
+  // Calculate summary metrics
+  const totalSales = salesReport?.reduce((sum, day) => sum + day.total_sales, 0) || 0;
+  const totalRevenue = salesReport?.reduce((sum, day) => sum + day.total_revenue, 0) || 0;
+  const avgDailySales = salesReport?.length > 0 ? totalSales / salesReport.length : 0;
+
+  const applyFilters = () => {
+    if (selectedReport === 'sales') {
+      refetchSales();
+    } else {
+      refetchProducts();
+    }
+  };
+
+  const clearFilters = () => {
+    const today = new Date();
+    const weekAgo = new Date(today);
+    weekAgo.setDate(today.getDate() - 7);
+    
+    setStartDate(weekAgo.toISOString().split('T')[0]);
+    setEndDate(today.toISOString().split('T')[0]);
+    setCategoryFilter('');
+    setSelectedPeriod('week');
+  };
 
   return (
     <div className="flex h-full">
       {/* Main Reports Content */}
-      <div className="flex-1 p-6">
-        <div className="bg-white rounded-lg shadow-sm h-full">
+      <div className="flex-1 p-6 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-sm h-full flex flex-col">
           <div className="p-6 border-b border-gray-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-900">Reportes</h2>
-              <button className="flex items-center space-x-2 bg-slate-700 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">
-                <Download size={16} />
-                <span>Exportar</span>
+              <button 
+                onClick={exportToExcel}
+                disabled={!currentData || currentData.length === 0}
+                className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FileSpreadsheet size={16} />
+                <span>Exportar Excel</span>
               </button>
             </div>
             
@@ -66,7 +145,7 @@ const Reports = () => {
               
               <select
                 value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
+                onChange={(e) => handlePeriodChange(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
               >
                 {periods.map((period) => (
@@ -78,77 +157,88 @@ const Reports = () => {
             </div>
           </div>
 
-          {/* Summary Cards */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-slate-700 text-white p-4 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <TrendingUp size={20} />
+          {/* Summary Cards - Only for sales reports */}
+          {selectedReport === 'sales' && (
+            <div className="p-6 border-b border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-slate-700 text-white p-4 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <TrendingUp size={20} />
+                  </div>
+                  <div className="text-2xl font-bold">{totalSales}</div>
+                  <div className="text-slate-200 text-sm">Total Ventas</div>
                 </div>
-                <div className="text-2xl font-bold">{totalSales}</div>
-                <div className="text-slate-200 text-sm">Total Ventas</div>
-              </div>
-              
-              <div className="bg-slate-700 text-white p-4 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <Calendar size={20} />
+                
+                <div className="bg-slate-700 text-white p-4 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <Calendar size={20} />
+                  </div>
+                  <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
+                  <div className="text-slate-200 text-sm">Ingresos Totales</div>
                 </div>
-                <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
-                <div className="text-slate-200 text-sm">Ingresos Totales</div>
-              </div>
-              
-              <div className="bg-slate-700 text-white p-4 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <TrendingDown size={20} />
+                
+                <div className="bg-slate-700 text-white p-4 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <TrendingDown size={20} />
+                  </div>
+                  <div className="text-2xl font-bold">{avgDailySales.toFixed(1)}</div>
+                  <div className="text-slate-200 text-sm">Promedio Diario</div>
                 </div>
-                <div className="text-2xl font-bold">{avgDailySales.toFixed(1)}</div>
-                <div className="text-slate-200 text-sm">Promedio Diario</div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Reports Table */}
-          <div className="overflow-x-auto">
-            {selectedReport === 'sales' ? (
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Fecha</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Ventas</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Total</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Productos</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {salesData.map((day, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-900">{day.fecha}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{day.ventas}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">${day.total}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{day.productos}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="flex-1 overflow-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-gray-500">Cargando reporte...</div>
+              </div>
             ) : (
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Producto</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Vendidos</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Ingresos</th>
-                    <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Stock</th>
+                    {selectedReport === 'sales' ? (
+                      <>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Fecha</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Ventas</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Ingresos</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Productos Vendidos</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Código</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Producto</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Vendidos</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Ingresos</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium text-gray-900">Stock Actual</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {productReports.map((product, index) => (
+                  {currentData?.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-900">{product.producto}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{product.vendidos}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">${product.ingresos}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{product.stock}</td>
+                      {selectedReport === 'sales' ? (
+                        <>
+                          <td className="px-6 py-4 text-sm text-gray-900">
+                            {new Date(item.date).toLocaleDateString('es-ES')}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{item.total_sales}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">${item.total_revenue.toFixed(2)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{item.total_products_sold}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-6 py-4 text-sm text-gray-900">{item.product_code}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{item.product_name}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{item.total_sold}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">${item.total_revenue.toFixed(2)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{item.current_stock}</td>
+                        </>
+                      )}
                     </tr>
-                  ))}
+                  )) || []}
                 </tbody>
               </table>
             )}
@@ -158,7 +248,7 @@ const Reports = () => {
 
       {/* Filters Sidebar */}
       <div className="w-80 bg-white shadow-lg border-l border-gray-200">
-        <div className="p-6">
+        <div className="p-6 h-full overflow-y-auto">
           <h3 className="text-xl font-bold text-gray-900 mb-6">Filtros</h3>
           
           <div className="space-y-6">
@@ -168,6 +258,8 @@ const Reports = () => {
               </label>
               <input
                 type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
               />
             </div>
@@ -178,27 +270,43 @@ const Reports = () => {
               </label>
               <input
                 type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Categoría
-              </label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent">
-                <option value="">Todas las categorías</option>
-                <option value="granos">Granos</option>
-                <option value="aceites">Aceites</option>
-                <option value="azucares">Azúcares</option>
-              </select>
-            </div>
+            {selectedReport === 'products' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Categoría
+                </label>
+                <select 
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                >
+                  <option value="">Todas las categorías</option>
+                  {categories?.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             
-            <button className="w-full bg-slate-700 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors">
+            <button 
+              onClick={applyFilters}
+              className="w-full bg-slate-700 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+            >
               Aplicar Filtros
             </button>
             
-            <button className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+            <button 
+              onClick={clearFilters}
+              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+            >
               Limpiar Filtros
             </button>
           </div>
