@@ -1,44 +1,72 @@
 import React, { useState } from 'react';
 import { Search } from 'lucide-react';
+import { useApi, useApiMutation } from '../hooks/useApi';
+import apiService from '../services/api';
 
 const Products = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [newProduct, setNewProduct] = useState({
+    code: '',
     nombre: '',
     precio: '',
-    cantidad: ''
+    stock: '',
+    min_stock: '10',
+    category_id: '',
+    supplier_id: ''
   });
-  const [products, setProducts] = useState([
-    { id: '1', codigo: 'ARR001', nombre: 'Libra de arroz', precio: 0.50, cantidad: 150 },
-    { id: '2', codigo: 'FRJ002', nombre: 'Frijoles negros', precio: 0.75, cantidad: 89 },
-    { id: '3', codigo: 'AZU003', nombre: 'Azúcar blanca', precio: 0.60, cantidad: 45 },
-    { id: '4', codigo: 'ACE004', nombre: 'Aceite vegetal', precio: 1.25, cantidad: 23 },
-  ]);
+  
+  const { data: products, loading, error, refetch } = useApi('/products');
+  const { data: categories } = useApi('/categories');
+  const { data: suppliers } = useApi('/suppliers');
+  const { mutate, loading: creating } = useApiMutation();
 
-  const filteredProducts = products.filter(product =>
-    product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.codigo.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredProducts = products?.filter(product =>
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddProduct = () => {
-    if (newProduct.nombre && newProduct.precio && newProduct.cantidad) {
-      const product = {
-        id: Date.now().toString(),
-        codigo: `PRD${Date.now().toString().slice(-3)}`,
-        nombre: newProduct.nombre,
-        precio: parseFloat(newProduct.precio),
-        cantidad: parseInt(newProduct.cantidad)
-      };
-      setProducts([...products, product]);
-      setNewProduct({ nombre: '', precio: '', cantidad: '' });
+  const handleAddProduct = async () => {
+    if (newProduct.code && newProduct.nombre && newProduct.precio && newProduct.stock) {
+      try {
+        await mutate(() => apiService.createProduct({
+          code: newProduct.code,
+          name: newProduct.nombre,
+          price: parseFloat(newProduct.precio),
+          stock: parseInt(newProduct.stock),
+          min_stock: parseInt(newProduct.min_stock),
+          category_id: newProduct.category_id ? parseInt(newProduct.category_id) : null,
+          supplier_id: newProduct.supplier_id ? parseInt(newProduct.supplier_id) : null
+        }));
+        
+        setNewProduct({ 
+          code: '', 
+          nombre: '', 
+          precio: '', 
+          stock: '', 
+          min_stock: '10',
+          category_id: '',
+          supplier_id: ''
+        });
+        refetch();
+      } catch (error) {
+        console.error('Error creating product:', error);
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-gray-500">Cargando productos...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full">
       {/* Products List */}
-      <div className="flex-1 p-6">
-        <div className="bg-white rounded-lg shadow-sm h-full">
+      <div className="flex-1 p-6 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-sm h-full flex flex-col">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Productos</h2>
             <div className="relative">
@@ -52,7 +80,7 @@ const Products = () => {
               />
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="flex-1 overflow-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -63,14 +91,14 @@ const Products = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredProducts.map((product) => (
+                {filteredProducts?.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">{product.codigo}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{product.nombre}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">${product.precio.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{product.cantidad}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{product.code}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{product.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">${product.price.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{product.stock}</td>
                   </tr>
-                ))}
+                )) || []}
               </tbody>
             </table>
           </div>
@@ -79,9 +107,22 @@ const Products = () => {
 
       {/* Add Product Sidebar */}
       <div className="w-80 bg-white shadow-lg border-l border-gray-200">
-        <div className="p-6">
+        <div className="p-6 h-full overflow-y-auto">
           <h3 className="text-xl font-bold text-gray-900 mb-6">Nuevo producto</h3>
           <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Código
+              </label>
+              <input
+                type="text"
+                placeholder="ARR001"
+                value={newProduct.code}
+                onChange={(e) => setNewProduct({ ...newProduct, code: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+              />
+            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Nombre
@@ -111,22 +152,59 @@ const Products = () => {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Cantidad
+                Stock
               </label>
               <input
                 type="number"
                 placeholder="100"
-                value={newProduct.cantidad}
-                onChange={(e) => setNewProduct({ ...newProduct, cantidad: e.target.value })}
+                value={newProduct.stock}
+                onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
               />
             </div>
             
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Categoría
+              </label>
+              <select
+                value={newProduct.category_id}
+                onChange={(e) => setNewProduct({ ...newProduct, category_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+              >
+                <option value="">Seleccionar categoría</option>
+                {categories?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Proveedor
+              </label>
+              <select
+                value={newProduct.supplier_id}
+                onChange={(e) => setNewProduct({ ...newProduct, supplier_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+              >
+                <option value="">Seleccionar proveedor</option>
+                {suppliers?.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
             <button
               onClick={handleAddProduct}
-              className="w-full bg-slate-700 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+              disabled={creating}
+              className="w-full bg-slate-700 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors disabled:opacity-50"
             >
-              Agregar
+              {creating ? 'Agregando...' : 'Agregar'}
             </button>
           </div>
         </div>
